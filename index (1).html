@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>퇴직연금 DB형 vs DC형 전환 계산기</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+    .container { max-width: 680px; margin: 0 auto; }
+
+    .page-title { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+    .page-sub { font-size: 13px; color: #6e6e73; margin-bottom: 28px; }
+
+    .card { background: #fff; border-radius: 16px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+    .card-title { font-size: 15px; font-weight: 600; margin-bottom: 18px; color: #1d1d1f; }
+
+    .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .input-item { display: flex; flex-direction: column; gap: 5px; }
+    .label-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .field-label { font-size: 12px; color: #6e6e73; }
+    .input-row { display: flex; align-items: center; gap: 6px; }
+    .input-row input[type="text"], .input-row input[type="date"] {
+      flex: 1; min-width: 0; border: 1px solid #d2d2d7; border-radius: 8px;
+      padding: 0 10px; height: 36px; font-size: 13px; color: #1d1d1f;
+      background: #fff; text-align: right; outline: none;
+      transition: border-color 0.15s;
+    }
+    .input-row input[type="date"] { text-align: left; }
+    .input-row input:focus { border-color: #0071e3; }
+    .input-row input[readonly] { background: #f5f5f7; color: #6e6e73; }
+    .unit { font-size: 12px; color: #6e6e73; white-space: nowrap; flex-shrink: 0; }
+
+    .readonly-field {
+      background: #f5f5f7; border: 1px solid #d2d2d7; border-radius: 8px;
+      padding: 0 10px; height: 36px; display: flex; align-items: center;
+      justify-content: flex-end; font-size: 13px; font-weight: 500; color: #1d1d1f; width: 100%;
+    }
+    .readonly-field.muted { color: #6e6e73; font-weight: 400; }
+
+    .formula-note { font-size: 11px; color: #aeaeb2; margin-top: 3px; text-align: right; }
+
+    .badge { font-size: 11px; border-radius: 6px; padding: 2px 7px; white-space: nowrap; border: none; cursor: default; }
+    .badge-auto { color: #0071e3; background: #e8f0fe; }
+    .badge-manual { color: #b45309; background: #fef3c7; cursor: pointer; }
+    .badge-manual:hover { opacity: 0.8; }
+    .badge-reset { color: #6e6e73; background: #f5f5f7; border: 1px solid #d2d2d7; cursor: pointer; }
+    .badge-reset:hover { background: #e5e5ea; }
+
+    .divider { border: none; border-top: 1px solid #f0f0f0; margin: 20px 0; }
+
+    /* 슬라이더 */
+    .slider-block { margin-bottom: 18px; }
+    .slider-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .slider-label { font-size: 13px; color: #1d1d1f; }
+    .slider-track-row { display: table; width: 100%; table-layout: fixed; border-spacing: 0; }
+    .col-slider { display: table-cell; width: auto; padding-right: 10px; vertical-align: middle; }
+    .col-input { display: table-cell; width: 54px; vertical-align: middle; padding-right: 4px; }
+    .col-unit { display: table-cell; width: 16px; vertical-align: middle; font-size: 13px; color: #6e6e73; white-space: nowrap; }
+    .col-slider input[type="range"] { width: 100%; display: block; accent-color: #0071e3; }
+    .rate-input {
+      width: 100%; text-align: right; font-size: 13px; font-weight: 500;
+      padding: 0 6px; height: 32px; border-radius: 8px;
+      border: 1px solid #d2d2d7; background: #fff; color: #1d1d1f; display: block; outline: none;
+    }
+    .rate-input:focus { border-color: #0071e3; }
+
+    .cagr-hint { font-size: 12px; color: #6e6e73; margin-top: 8px; display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .cagr-hint.show { display: flex; }
+    .cagr-hint-val { font-weight: 600; color: #1d1d1f; }
+    .apply-cagr-btn {
+      font-size: 11px; color: #0071e3; background: #e8f0fe;
+      border: none; border-radius: 6px; padding: 3px 10px; cursor: pointer;
+    }
+    .apply-cagr-btn:hover { background: #d0e4ff; }
+
+    /* 연봉 패널 */
+    .panel { background: #f5f5f7; border-radius: 12px; padding: 16px; margin-top: 10px; display: none; }
+    .panel.open { display: block; }
+    .panel-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .panel-note { font-size: 12px; color: #6e6e73; margin-bottom: 12px; }
+    .salary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .salary-table th { text-align: left; font-weight: 500; color: #6e6e73; padding: 4px 8px 8px; font-size: 12px; }
+    .salary-table td { padding: 4px 6px; }
+    .salary-table input[type="text"] {
+      width: 150px; text-align: right; border: 1px solid #d2d2d7; border-radius: 8px;
+      padding: 0 8px; height: 32px; font-size: 13px; background: #fff; outline: none;
+    }
+    .salary-table input:focus { border-color: #0071e3; }
+    .add-row-btn {
+      font-size: 12px; color: #6e6e73; background: #fff; border: 1px solid #d2d2d7;
+      border-radius: 8px; padding: 5px 12px; cursor: pointer; margin-top: 8px;
+    }
+    .add-row-btn:hover { background: #f0f0f5; }
+    .del-btn { background: none; border: none; color: #aeaeb2; cursor: pointer; font-size: 15px; padding: 0 4px; }
+    .del-btn:hover { color: #ff3b30; }
+    .cagr-result { font-size: 12px; color: #6e6e73; margin-top: 10px; min-height: 18px; }
+    .cagr-result strong { color: #1d1d1f; }
+
+    .calc-btn {
+      font-size: 12px; color: #0071e3; background: #e8f0fe;
+      border: none; border-radius: 8px; padding: 5px 12px; cursor: pointer; white-space: nowrap;
+    }
+    .calc-btn:hover { background: #d0e4ff; }
+
+    /* 결과 카드 */
+    .result-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .rcard { background: #f5f5f7; border-radius: 12px; padding: 14px; }
+    .rcard-label { font-size: 11px; color: #6e6e73; margin-bottom: 6px; }
+    .rcard-value { font-size: 17px; font-weight: 600; word-break: break-all; }
+    .rcard-value.db { color: #0051a8; }
+    .rcard-value.dc { color: #0a7c59; }
+    .rcard-value.diff-pos { color: #0a7c59; }
+    .rcard-value.diff-neg { color: #c0392b; }
+
+    .result-note { font-size: 11px; color: #aeaeb2; margin-bottom: 0; }
+
+    /* 차트 */
+    .chart-legend { display: flex; gap: 16px; margin-bottom: 8px; font-size: 12px; color: #6e6e73; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; }
+    .chart-wrap { position: relative; width: 100%; height: 260px; }
+
+    /* 연도별 내역 */
+    .toggle-detail-btn {
+      font-size: 13px; color: #6e6e73; background: none; border: 1px solid #d2d2d7;
+      border-radius: 10px; padding: 8px 0; cursor: pointer; margin-top: 18px; display: block; width: 100%;
+    }
+    .toggle-detail-btn:hover { background: #f5f5f7; }
+    .detail-table-wrap { display: none; margin-top: 14px; overflow-x: auto; }
+    .detail-table-wrap.open { display: block; }
+    .detail-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .detail-table th {
+      text-align: right; font-size: 12px; font-weight: 500; color: #6e6e73;
+      padding: 7px 10px; border-bottom: 1px solid #f0f0f0;
+    }
+    .detail-table th:first-child { text-align: left; }
+    .detail-table td {
+      text-align: right; padding: 6px 10px; border-bottom: 1px solid #f5f5f7; font-size: 13px;
+    }
+    .detail-table td:first-child { text-align: left; color: #6e6e73; }
+    .detail-table tr:last-child td { border-bottom: none; }
+    .diff-pos-text { color: #0a7c59; }
+    .diff-neg-text { color: #c0392b; }
+
+    @media (max-width: 480px) {
+      .result-cards { grid-template-columns: 1fr; }
+      .input-grid { grid-template-columns: 1fr; }
+      .rcard-value { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="page-title">퇴직연금 전환 계산기</div>
+  <div class="page-sub">DB형과 DC형 퇴직연금을 비교해 최적의 선택을 도와드려요</div>
+
+  <!-- 기본 정보 -->
+  <div class="card">
+    <div class="card-title">기본 정보 입력</div>
+    <div class="input-grid">
+      <div class="input-item">
+        <div class="label-row"><span class="field-label">현재 연봉</span></div>
+        <div class="input-row"><input type="text" id="salary" value="60,000,000" inputmode="numeric"/><span class="unit">원</span></div>
+      </div>
+      <div class="input-item">
+        <div class="label-row"><span class="field-label">현재 나이</span></div>
+        <div class="input-row"><input type="text" id="current_age" value="35" inputmode="numeric"/><span class="unit">세</span></div>
+      </div>
+      <div class="input-item">
+        <div class="label-row"><span class="field-label">입사일</span></div>
+        <div class="input-row"><input type="date" id="join_date"/></div>
+      </div>
+      <div class="input-item">
+        <div class="label-row"><span class="field-label">근속연수</span><span class="badge badge-auto">자동계산</span></div>
+        <div class="readonly-field muted" id="tenure_display">입사일을 입력해주세요</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="input-grid">
+      <div class="input-item" style="grid-column:1/-1;">
+        <div class="label-row">
+          <span class="field-label">현재 DB형 예상 적립금</span>
+          <span class="badge badge-auto" id="auto_badge">자동계산</span>
+          <button class="badge badge-manual" id="manual_btn" onclick="enableManual()">직접 입력</button>
+          <button class="badge badge-reset" id="reset_btn" onclick="enableAuto()" style="display:none;">자동으로 되돌리기</button>
+        </div>
+        <div class="input-row"><input type="text" id="db_balance" value="" inputmode="numeric" readonly/><span class="unit">원</span></div>
+        <div class="formula-note" id="db_formula_note">월 평균임금 × 근속연수 기준</div>
+      </div>
+      <div class="input-item">
+        <div class="label-row"><span class="field-label">은퇴 나이</span></div>
+        <div class="input-row"><input type="text" id="retire_age" value="60" inputmode="numeric"/><span class="unit">세</span></div>
+      </div>
+      <div class="input-item">
+        <div class="label-row"><span class="field-label">은퇴까지</span><span class="badge badge-auto">자동계산</span></div>
+        <div class="readonly-field muted" id="years_left_display">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 성장률 가정 -->
+  <div class="card">
+    <div class="card-title">성장률 가정</div>
+
+    <div class="slider-block">
+      <div class="slider-label-row">
+        <span class="slider-label">예상 임금상승률 (미래)</span>
+        <button class="calc-btn" id="toggle_panel_btn" onclick="togglePanel()">연봉 이력으로 계산 ↓</button>
+      </div>
+      <div class="slider-track-row">
+        <div class="col-slider"><input type="range" id="future_raise" min="0" max="15" step="0.5" value="3"/></div>
+        <div class="col-input"><input type="text" class="rate-input" id="future_raise_txt" value="3.0" inputmode="decimal"/></div>
+        <div class="col-unit">%</div>
+      </div>
+      <div class="cagr-hint" id="cagr_hint">
+        과거 연봉 이력 기준 CAGR: <span class="cagr-hint-val" id="cagr_hint_val">—</span>
+        <button class="apply-cagr-btn" onclick="applyCagrToFuture()">미래 임금상승률에 적용</button>
+      </div>
+    </div>
+
+    <div class="panel" id="salary_panel">
+      <div class="panel-title">연도별 실제 연봉 입력</div>
+      <div class="panel-note">입사 첫 해부터 현재까지 연봉을 입력하면 연평균 상승률(CAGR)을 자동 계산해요.</div>
+      <table class="salary-table">
+        <thead><tr><th>연차</th><th>연봉 (원)</th><th></th></tr></thead>
+        <tbody id="salary_rows"></tbody>
+      </table>
+      <button class="add-row-btn" onclick="addRow()">+ 연도 추가</button>
+      <div class="cagr-result" id="cagr_result"></div>
+    </div>
+
+    <div class="slider-block" style="margin-top:4px;">
+      <div class="slider-label-row"><span class="slider-label">DC형 예상 투자수익률</span></div>
+      <div class="slider-track-row">
+        <div class="col-slider"><input type="range" id="dc_return" min="0" max="20" step="0.5" value="7"/></div>
+        <div class="col-input"><input type="text" class="rate-input" id="dc_return_txt" value="7.0" inputmode="decimal"/></div>
+        <div class="col-unit">%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div class="card">
+    <div class="card-title">예상 퇴직금 비교</div>
+    <div class="result-cards">
+      <div class="rcard"><div class="rcard-label">DB형 예상 퇴직금</div><div class="rcard-value db" id="result_db">—</div></div>
+      <div class="rcard"><div class="rcard-label">DC형 예상 퇴직금</div><div class="rcard-value dc" id="result_dc">—</div></div>
+      <div class="rcard"><div class="rcard-label">DC - DB 차이</div><div class="rcard-value" id="result_diff">—</div></div>
+    </div>
+    <p class="result-note">DB형: 은퇴 시점 최종 월급 × 전체 근속연수 &nbsp;|&nbsp; DC형: 현재 적립금 + 매년 연봉 1/12 복리 운용</p>
+
+    <div class="divider"></div>
+
+    <div class="chart-legend">
+      <span><span class="legend-dot" style="background:#0051a8;"></span>DB형</span>
+      <span><span class="legend-dot" style="background:#0a7c59;"></span>DC형</span>
+    </div>
+    <div class="chart-wrap"><canvas id="growthChart"></canvas></div>
+
+    <button class="toggle-detail-btn" id="detail_btn" onclick="toggleDetail()">연도별 내역 펼치기 ↓</button>
+    <div class="detail-table-wrap" id="detail_wrap">
+      <table class="detail-table">
+        <thead><tr><th>시점</th><th>DB형 예상 퇴직금</th><th>DC형 예상 퇴직금</th><th>DC - DB 차이</th></tr></thead>
+        <tbody id="detail_tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="text-align:center;font-size:11px;color:#aeaeb2;margin-top:8px;">본 계산기는 참고용이며 실제 퇴직금과 다를 수 있어요.</div>
+</div>
+
+<script>
+let isManual=false,tenureYears=0,tenureMonths=0,yearsLeft=0,lastDbData=[],lastDcData=[],computedCAGR=null;
+
+const krw=v=>Math.round(v).toLocaleString('ko-KR')+'원';
+const krwAxis=v=>{if(v>=100000000)return(v/100000000).toFixed(0)+'억';if(v>=10000000)return(v/10000000).toFixed(0)+'천만';if(v>=10000)return(v/10000).toFixed(0)+'만';return v.toLocaleString('ko-KR');};
+function getRaw(id){return parseFloat(document.getElementById(id).value.replace(/,/g,''))||0;}
+
+function bindCommaInput(id,cb){
+  document.getElementById(id).addEventListener('input',function(){
+    const raw=this.value.replace(/,/g,'').replace(/[^0-9]/g,'');
+    this.value=raw===''?'':parseInt(raw,10).toLocaleString('ko-KR');
+    if(cb)cb();
+  });
+}
+
+function bindRateSlider(sliderId,txtId,cb){
+  const slider=document.getElementById(sliderId),txt=document.getElementById(txtId);
+  slider.addEventListener('input',()=>{txt.value=parseFloat(slider.value).toFixed(1);if(cb)cb();});
+  txt.addEventListener('input',()=>{
+    let v=parseFloat(txt.value.replace(/[^0-9.]/g,''));
+    if(isNaN(v))return;
+    v=Math.min(parseFloat(slider.max),Math.max(parseFloat(slider.min),v));
+    slider.value=Math.round(v*2)/2;if(cb)cb();
+  });
+  txt.addEventListener('blur',()=>{
+    let v=parseFloat(txt.value);
+    if(isNaN(v))v=parseFloat(slider.value);
+    v=Math.min(parseFloat(slider.max),Math.max(parseFloat(slider.min),v));
+    txt.value=v.toFixed(1);slider.value=Math.round(v*2)/2;
+  });
+}
+
+function updateTenure(){
+  const joinVal=document.getElementById('join_date').value,display=document.getElementById('tenure_display');
+  if(!joinVal){tenureYears=0;tenureMonths=0;display.textContent='입사일을 입력해주세요';display.classList.add('muted');return;}
+  const today=new Date(),join=new Date(joinVal);
+  let y=today.getFullYear()-join.getFullYear(),m=today.getMonth()-join.getMonth();
+  if(today.getDate()<join.getDate())m--;if(m<0){y--;m+=12;}
+  tenureYears=Math.max(0,y);tenureMonths=Math.max(0,m);
+  display.textContent=(tenureYears>0?tenureYears+'년 ':'')+tenureMonths+'개월';
+  display.classList.remove('muted');updateAutoBalance();updateYearsLeft();
+}
+
+function updateYearsLeft(){
+  const age=getRaw('current_age'),retireAge=getRaw('retire_age'),display=document.getElementById('years_left_display');
+  if(!age||!retireAge){display.textContent='—';display.classList.add('muted');yearsLeft=0;return;}
+  const left=retireAge-age;
+  if(left<=0){display.textContent='이미 은퇴 연령';display.classList.add('muted');yearsLeft=0;return;}
+  yearsLeft=left;display.textContent=left+'년';display.classList.remove('muted');updateChart();
+}
+
+function getTenureDecimal(){return tenureYears+tenureMonths/12;}
+
+function updateAutoBalance(){
+  if(!isManual){const bal=Math.round((getRaw('salary')/12)*getTenureDecimal());document.getElementById('db_balance').value=bal.toLocaleString('ko-KR');}
+}
+
+function enableManual(){
+  isManual=true;const el=document.getElementById('db_balance');
+  el.removeAttribute('readonly');el.style.background='';
+  document.getElementById('auto_badge').style.display='none';
+  document.getElementById('manual_btn').style.display='none';
+  document.getElementById('reset_btn').style.display='';
+  document.getElementById('db_formula_note').textContent='직접 입력 중';el.focus();
+}
+
+function enableAuto(){
+  isManual=false;const el=document.getElementById('db_balance');
+  el.setAttribute('readonly',true);el.style.background='';
+  document.getElementById('auto_badge').style.display='';
+  document.getElementById('manual_btn').style.display='';
+  document.getElementById('reset_btn').style.display='none';
+  document.getElementById('db_formula_note').textContent='월 평균임금 × 근속연수 기준';
+  updateAutoBalance();updateChart();
+}
+
+function makeCommaInput(placeholder){
+  const inp=document.createElement('input');inp.type='text';inp.inputMode='numeric';inp.placeholder=placeholder||'';inp.style.cssText='width:150px;text-align:right;border:1px solid #d2d2d7;border-radius:8px;padding:0 8px;height:32px;font-size:13px;background:#fff;outline:none;';
+  inp.addEventListener('focus',()=>{inp.style.borderColor='#0071e3';});
+  inp.addEventListener('blur',()=>{inp.style.borderColor='#d2d2d7';});
+  inp.addEventListener('input',()=>{const raw=inp.value.replace(/,/g,'').replace(/[^0-9]/g,'');inp.value=raw===''?'':parseInt(raw,10).toLocaleString('ko-KR');recalcCAGR();});
+  return inp;
+}
+
+function togglePanel(){
+  const panel=document.getElementById('salary_panel'),btn=document.getElementById('toggle_panel_btn'),isOpen=panel.classList.contains('open');
+  if(isOpen){panel.classList.remove('open');btn.textContent='연봉 이력으로 계산 ↓';}
+  else{panel.classList.add('open');btn.textContent='닫기 ↑';if(!document.getElementById('salary_rows').children.length)initRows();}
+}
+
+function initRows(){const c=Math.max(2,Math.min(tenureYears+1,10));for(let i=0;i<c;i++)addRow();}
+
+let rowCount=0;
+function addRow(){
+  rowCount++;const tbody=document.getElementById('salary_rows'),tr=document.createElement('tr');tr.id='row_'+rowCount;
+  const tdL=document.createElement('td');tdL.style.cssText='color:#6e6e73;font-size:13px;padding:4px 6px;';tdL.textContent=rowCount+'년차';
+  const tdI=document.createElement('td');tdI.style.padding='4px 6px';tdI.appendChild(makeCommaInput('예: 40,000,000'));
+  const tdD=document.createElement('td');tdD.style.padding='4px 2px';
+  const db=document.createElement('button');db.className='del-btn';db.textContent='✕';
+  db.onclick=()=>{tr.remove();renumberRows();recalcCAGR();};tdD.appendChild(db);
+  tr.appendChild(tdL);tr.appendChild(tdI);tr.appendChild(tdD);tbody.appendChild(tr);renumberRows();
+}
+
+function renumberRows(){document.getElementById('salary_rows').querySelectorAll('tr').forEach((tr,i)=>{tr.querySelector('td').textContent=(i+1)+'년차';});}
+
+function recalcCAGR(){
+  const salaries=[];document.getElementById('salary_rows').querySelectorAll('tr').forEach(tr=>{const v=parseFloat(tr.querySelector('input').value.replace(/,/g,''));if(!isNaN(v)&&v>0)salaries.push(v);});
+  const resultEl=document.getElementById('cagr_result'),hintEl=document.getElementById('cagr_hint');
+  if(salaries.length<2){resultEl.textContent='2개 이상 연봉을 입력해주세요.';computedCAGR=null;hintEl.classList.remove('show');return;}
+  computedCAGR=parseFloat(((Math.pow(salaries[salaries.length-1]/salaries[0],1/(salaries.length-1))-1)*100).toFixed(1));
+  resultEl.innerHTML=`연평균 임금상승률(CAGR): <strong>${computedCAGR.toFixed(1)}%</strong> (${salaries.length}개 연도 기준)`;
+  document.getElementById('cagr_hint_val').textContent=computedCAGR.toFixed(1)+'%';
+  hintEl.classList.add('show');
+}
+
+function applyCagrToFuture(){
+  if(computedCAGR===null)return;
+  const r=Math.round(Math.min(15,Math.max(0,computedCAGR))*2)/2;
+  document.getElementById('future_raise').value=r;document.getElementById('future_raise_txt').value=r.toFixed(1);
+  togglePanel();updateChart();
+}
+
+function toggleDetail(){
+  const wrap=document.getElementById('detail_wrap'),btn=document.getElementById('detail_btn'),isOpen=wrap.classList.contains('open');
+  if(isOpen){wrap.classList.remove('open');btn.textContent='연도별 내역 펼치기 ↓';}
+  else{wrap.classList.add('open');btn.textContent='연도별 내역 접기 ↑';renderDetailTable();}
+}
+
+function renderDetailTable(){
+  const tbody=document.getElementById('detail_tbody');tbody.innerHTML='';
+  for(let i=0;i<lastDbData.length;i++){
+    const diff=lastDcData[i]-lastDbData[i],tr=document.createElement('tr');
+    tr.innerHTML=`<td>${i+1}년 후</td><td>${lastDbData[i].toLocaleString('ko-KR')}원</td><td>${lastDcData[i].toLocaleString('ko-KR')}원</td><td class="${diff>=0?'diff-pos-text':'diff-neg-text'}">${diff>=0?'+':''}${diff.toLocaleString('ko-KR')}원</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function calculate(){
+  const salary=getRaw('salary'),tenure=getTenureDecimal(),dbBalance=getRaw('db_balance');
+  const futureRaise=parseFloat(document.getElementById('future_raise').value)/100;
+  const dcReturn=parseFloat(document.getElementById('dc_return').value)/100;
+  const dbResult=(salary*Math.pow(1+futureRaise,yearsLeft))/12*(tenure+yearsLeft);
+  let dcFund=dbBalance;
+  for(let i=1;i<=yearsLeft;i++)dcFund=dcFund*(1+dcReturn)+salary*Math.pow(1+futureRaise,i)/12;
+  const diff=dcFund-dbResult;
+  document.getElementById('result_db').textContent=krw(dbResult);
+  document.getElementById('result_dc').textContent=krw(dcFund);
+  const diffEl=document.getElementById('result_diff');
+  diffEl.textContent=(diff>=0?'+':'-')+krw(Math.abs(diff));
+  diffEl.className='rcard-value '+(diff>=0?'diff-pos':'diff-neg');
+  return{salary,tenure,futureRaise,dcReturn,dbBalance};
+}
+
+let chart;
+function updateChart(){
+  updateAutoBalance();
+  const{salary,tenure,futureRaise,dcReturn,dbBalance}=calculate();
+  const labels=[];lastDbData=[];lastDcData=[];let dcFund=dbBalance;
+  for(let i=1;i<=yearsLeft;i++){
+    dcFund=dcFund*(1+dcReturn)+salary*Math.pow(1+futureRaise,i)/12;
+    lastDbData.push(Math.round((salary*Math.pow(1+futureRaise,i))/12*(tenure+i)));
+    lastDcData.push(Math.round(dcFund));labels.push(i+'년 후');
+  }
+  if(document.getElementById('detail_wrap').classList.contains('open'))renderDetailTable();
+  if(chart){chart.data.labels=labels;chart.data.datasets[0].data=lastDbData;chart.data.datasets[1].data=lastDcData;chart.update();}
+  else{
+    chart=new Chart(document.getElementById('growthChart'),{
+      type:'line',
+      data:{labels,datasets:[
+        {label:'DB형',data:lastDbData,borderColor:'#0051a8',backgroundColor:'rgba(0,81,168,0.07)',fill:true,tension:0.3,pointRadius:2},
+        {label:'DC형',data:lastDcData,borderColor:'#0a7c59',backgroundColor:'rgba(10,124,89,0.07)',fill:true,tension:0.3,pointRadius:2,borderDash:[5,3]}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>ctx.dataset.label+': '+Math.round(ctx.raw).toLocaleString('ko-KR')+'원'}}},
+        scales:{x:{ticks:{autoSkip:true,maxTicksLimit:10,font:{size:11}}},y:{ticks:{font:{size:11},callback:krwAxis}}}
+      }
+    });
+  }
+}
+
+const defJoin=new Date();defJoin.setFullYear(defJoin.getFullYear()-5);
+document.getElementById('join_date').value=defJoin.toISOString().split('T')[0];
+document.getElementById('join_date').addEventListener('change',updateTenure);
+bindCommaInput('salary',()=>{updateAutoBalance();updateChart();});
+bindCommaInput('current_age',updateYearsLeft);
+bindCommaInput('retire_age',updateYearsLeft);
+bindCommaInput('db_balance',updateChart);
+bindRateSlider('future_raise','future_raise_txt',updateChart);
+bindRateSlider('dc_return','dc_return_txt',updateChart);
+updateTenure();updateYearsLeft();
+</script>
+</body>
+</html>
